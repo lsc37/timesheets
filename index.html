@@ -329,11 +329,14 @@ $("copyPrompt").addEventListener("click",()=>{
 });
 
 // ---------- EXPORT ----------
+const fileNames = { Da: "Anida", Nun: "Anun" };
 $("pngBtn").addEventListener("click",()=>{
   html2canvas($("outputCard"),{scale:2,backgroundColor:"#fff"}).then(c=>{
     const a=document.createElement("a");
-    const label=($("periodLabel").value||"timesheet").replace(/[^a-z0-9]+/gi,"-");
-    a.download=`${state.names[state.emp].replace(/[^a-z0-9]+/gi,"-")}-${label}.png`;
+    const carer=(fileNames[state.emp]||state.emp).toLowerCase();
+    const period=($("periodLabel").value||"period").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase();
+    const paid = $("paidToggle") && $("paidToggle").checked ? "-paid" : "";
+    a.download=`${carer}-${period}${paid}.png`;
     a.href=c.toDataURL("image/png"); a.click();
   });
 });
