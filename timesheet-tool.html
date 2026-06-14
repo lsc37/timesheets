@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Carer Timesheets</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  :root{
+    --blue:#cfe0f5; --grey:#d9d9d9; --pink:#fce4ec; --line:#c8c8c8;
+    --txt:#1a1a1a; --accent:#1a73e8;
+  }
+  *{box-sizing:border-box;}
+  body{font-family:Arial,Helvetica,sans-serif;color:var(--txt);margin:0;background:#f4f6f9;}
+  header{background:#fff;border-bottom:1px solid var(--line);padding:16px 22px;position:sticky;top:0;z-index:5;}
+  header h1{margin:0;font-size:19px;}
+  header p{margin:4px 0 0;font-size:13px;color:#555;}
+  .wrap{max-width:1240px;margin:0 auto;padding:20px 22px 90px;}
+  .panel{background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px;margin-bottom:20px;}
+  .panel h2{margin:0 0 12px;font-size:15px;}
+  .row-controls{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;}
+  .field{display:flex;flex-direction:column;font-size:12px;gap:3px;}
+  .field label{color:#555;font-weight:bold;}
+  input,select,textarea{padding:6px 8px;border:1px solid #bbb;border-radius:5px;font-size:13px;font-family:inherit;}
+  input[type=number]{width:80px;}
+  textarea{width:100%;min-height:90px;font-family:monospace;font-size:12px;}
+  button{cursor:pointer;border:none;border-radius:6px;padding:8px 14px;font-size:13px;font-weight:bold;background:var(--accent);color:#fff;}
+  button.secondary{background:#eef1f5;color:#222;border:1px solid #cdd3db;}
+  button.tiny{padding:4px 8px;font-size:12px;}
+  button.danger{background:#fbe4e4;color:#a40000;}
+  .emp-tabs{display:flex;gap:8px;margin-bottom:14px;}
+  .emp-tabs button{background:#eef1f5;color:#333;border:1px solid #cdd3db;}
+  .emp-tabs button.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+  table.sheet{border-collapse:collapse;width:100%;font-size:13px;background:#fff;}
+  table.sheet th,table.sheet td{border:1px solid var(--line);padding:5px 8px;text-align:left;white-space:nowrap;}
+  table.sheet thead th{background:var(--grey);font-weight:bold;}
+  table.sheet td.calc{background:#f5f5f5;color:#333;}
+  table.sheet td.editable{background:var(--blue);}
+  /* IN pair = blue, OUT pair = amber, in the output table */
+  table.sheet th.col-in,table.sheet td.col-in{background:#d6e4f7;}
+  table.sheet th.col-out,table.sheet td.col-out{background:#fce8cd;}
+  .title-cell{background:#fff7d6;font-weight:bold;font-size:15px;}
+  .totals td{font-weight:bold;}
+  .totals .label{background:var(--pink);}
+  .totals .val{background:var(--pink);text-align:right;}
+  .hint{font-size:12px;color:#666;margin:8px 0 0;line-height:1.5;}
+  .inline-input{border:none;background:transparent;width:100%;font-size:13px;padding:2px;}
+  .inline-input:focus{background:#fff;outline:1px solid var(--accent);}
+  .toprow{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;}
+  .export-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
+  .note{background:#fff8e1;border:1px solid #f0e0a0;border-radius:6px;padding:10px 12px;font-size:12.5px;line-height:1.5;margin-bottom:16px;}
+  #checkBanner{padding:10px 12px;border-radius:6px;font-size:13px;margin-top:12px;font-weight:bold;}
+  .ok{background:#e6f4ea;color:#1e7e34;border:1px solid #b6dfc0;}
+  .warn{background:#fbe4e4;color:#a40000;border:1px solid #f0b0b0;}
+  .editable-time td{background:var(--blue);}
+  table.sheet tr.dbl td{color:#1e7e34;font-weight:bold;background:#eafaf0;}
+  td.note-cell{white-space:normal;max-width:220px;}
+  .note-input{border:none;background:transparent;width:100%;font-size:12px;font-family:inherit;}
+  .note-input:focus{background:#fff;outline:1px solid var(--accent);}
+  .dbl-tag{font-size:10px;background:#1e7e34;color:#fff;border-radius:3px;padding:1px 5px;margin-left:4px;vertical-align:middle;}
+  .grand{background:#fff0c2;border:1px solid #e8d27a;border-radius:6px;padding:10px 12px;font-size:14px;font-weight:bold;margin-top:12px;}
+  .out-layout{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;}
+  .totals-wrap{padding-top:30px;}
+  table.totals-side{width:auto;border-collapse:collapse;}
+  table.totals-side td{border:1px solid var(--line);padding:7px 12px;font-weight:bold;font-size:13px;white-space:nowrap;}
+  table.totals-side .label{background:var(--pink);}
+  table.totals-side .val{background:var(--pink);text-align:right;}
+  table.totals-side .paid-cell{background:#1e7e34;color:#fff;text-align:center;letter-spacing:3px;font-size:15px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Carer Timesheets</h1>
+  <p>Review the shifts read from the logbook, edit if needed, download the PNG to send, and save the period to the shared Google Sheet. Nothing leaves your browser except the Google Sheet save.</p>
+</header>
+
+<div class="wrap">
+
+  <div class="note">
+    <b>How hours are counted:</b> total hours = <i>(Date out + Time out) − (Date in + Time in)</i> — i.e. every hour the carer is present, including multi-day shifts. Day of week is filled in from the date automatically.
+  </div>
+
+  <!-- SETUP -->
+  <div class="panel">
+    <h2>1. Pay period &amp; rates</h2>
+    <div class="row-controls">
+      <div class="field"><label>Period label</label><input id="periodLabel" type="text" style="width:240px" placeholder="e.g. 1–16 June 2026"></div>
+      <div class="field"><label>Period START (date &amp; time)</label><input id="periodStart" type="datetime-local"></div>
+      <div class="field"><label>Period END (date &amp; time)</label><input id="periodEnd" type="datetime-local"></div>
+      <div class="field"><label>Da — rate (RM/hr)</label><input id="rateDa" type="number" value="12" step="0.5"></div>
+      <div class="field"><label>Nun — rate (RM/hr)</label><input id="rateNun" type="number" value="9" step="0.5"></div>
+    </div>
+    <p class="hint">Period start/end power the sum-check (e.g. 1 Jun 07:00 → 16 Jun 07:00 = 360h). For double-rate holidays, tick “2×” on the row.</p>
+  </div>
+
+  <!-- LOAD FROM OCR -->
+  <div class="panel">
+    <h2>2. Load shifts from logbook</h2>
+    <p class="hint" style="margin-top:0">Each pay period: in <b>Cowork</b>, attach the new logbook photo and paste the prompt below. Copy the rows it returns into the box here and click Load.</p>
+    <div style="background:#f3f6fb;border:1px solid #cdd9ec;border-radius:6px;padding:10px 12px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;">
+        <b style="font-size:12px;">Copy-paste prompt for Cowork</b>
+        <button id="copyPrompt" class="tiny secondary">Copy prompt</button>
+      </div>
+      <div id="coworkPrompt" style="font-size:12px;font-family:monospace;white-space:pre-wrap;line-height:1.45;color:#222;">Read this carer logbook photo into shift rows for my timesheet tool. Output ONLY lines, one shift per line, no other text, in this exact format:
+
+carer, date-in (YYYY-MM-DD), time-in (HH:MM, 24h), date-out (YYYY-MM-DD), time-out (HH:MM, 24h)
+
+Rules:
+- carer is "Da" (Anida) or "Nun" (Anun), exactly as written in the Nurse column.
+- Use the logbook's Date in for date-in and Date out for date-out (shifts can span several days).
+- Convert am/pm to 24-hour time (7am = 07:00, 8pm = 20:00).
+- Infer the year from the photo header; if only "26" is shown assume 2026.
+- Do not compute hours or salary — just the raw rows.
+- If a value is unclear, add it as a 6th field note, e.g.: Da, 2026-06-01, 07:00, 2026-06-02, 07:00, CHECK time-in</div>
+    </div>
+    <p class="hint" style="margin-top:0">Format: <code>Da, 2026-06-04, 20:00, 2026-06-06, 07:00</code> (carer, date in, time in, date out, time out — optional 6th field = annotation). You can also add/edit rows by hand below.</p>
+    <textarea id="ocrBox" placeholder="Da, 2026-06-01, 07:00, 2026-06-02, 07:00
+Nun, 2026-06-02, 07:00, 2026-06-02, 20:00"></textarea>
+    <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
+      <button id="loadOcr">Load these rows</button>
+      <button id="clearAll" class="secondary danger">Clear everything</button>
+    </div>
+  </div>
+
+  <!-- ENTRY -->
+  <div class="panel">
+    <h2>3. Shifts (edit anything)</h2>
+    <div class="emp-tabs" id="empTabs">
+      <button data-emp="Da" class="active">Anida (Da)</button>
+      <button data-emp="Nun">Anun</button>
+    </div>
+    <div class="row-controls" style="margin-bottom:14px;">
+      <div class="field"><label>Date in</label><input id="addDin" type="date"></div>
+      <div class="field"><label>Time in</label><input id="addTin" type="time" value="07:00"></div>
+      <div class="field"><label>Date out</label><input id="addDout" type="date"></div>
+      <div class="field"><label>Time out</label><input id="addTout" type="time" value="07:00"></div>
+      <button id="addBtn">Add shift</button>
+    </div>
+    <div style="overflow-x:auto;"><table class="sheet" id="entryTable"></table></div>
+    <div id="checkBanner"></div>
+  </div>
+
+  <!-- OUTPUT -->
+  <div class="panel">
+    <div class="toprow">
+      <h2 style="margin:0">4. Timesheet to send <span id="outName"></span></h2>
+      <div class="export-actions">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:bold;background:#eef1f5;border:1px solid #cdd3db;border-radius:6px;padding:6px 12px;cursor:pointer;">
+          <input type="checkbox" id="paidToggle"> Mark PAID
+        </label>
+        <button id="pngBtn">Download as image (PNG)</button>
+        <button id="copyBtn" class="secondary">Copy table</button>
+        <button id="sheetBtn" class="secondary">Save period to Google Sheet</button>
+      </div>
+    </div>
+    <div id="outputArea" style="overflow-x:auto;background:#fff;padding:10px;"><div id="outputCard"></div></div>
+    <p class="hint" id="sheetStatus"></p>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="panel">
+    <h2>Google Sheet connection (one-time setup)</h2>
+    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+      <div class="field" style="flex:1;min-width:360px;">
+        <label>Apps Script Web App URL</label>
+        <input id="scriptUrl" type="text" placeholder="https://script.google.com/macros/s/..../exec">
+      </div>
+      <button id="testBtn" class="secondary">Test connection</button>
+    </div>
+    <p class="hint">Paste the web-app URL from the Apps Script you deployed (see the setup guide). Must be the <b>/exec</b> URL, deployed with access “Anyone”. It's remembered in this browser. Family members paste the same URL once.</p>
+  </div>
+
+</div>
+
+<script>
+const state = {
+  emp: "Da",
+  rates: { Da: 12, Nun: 9 },
+  names: { Da: "Anida (Da)", Nun: "Anun" },
+  shifts: { Da: [], Nun: [] }
+};
+const $ = id => document.getElementById(id);
+const uid = () => Math.random().toString(36).slice(2,9);
+
+// restore script url
+if(localStorage.getItem("tsScriptUrl")) $("scriptUrl").value=localStorage.getItem("tsScriptUrl");
+$("scriptUrl").addEventListener("change",e=>localStorage.setItem("tsScriptUrl",e.target.value.trim()));
+
+function parseYMD(d){ const [y,m,day]=d.split("-").map(Number); return new Date(y,m-1,day); }
+function fmtDMY(d){ if(!d) return ""; const dt=parseYMD(d); return String(dt.getDate()).padStart(2,'0')+"/"+String(dt.getMonth()+1).padStart(2,'0')+"/"+String(dt.getFullYear()).slice(2); }
+function dayName(d){ if(!d) return ""; return ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][parseYMD(d).getDay()]; }
+function fmtHM(h){ if(h===null) return "n/a"; const hh=Math.floor(h), mm=Math.round((h-hh)*60); return hh+":"+String(mm).padStart(2,'0'); }
+
+function calcHours(s){
+  if(!s.din||!s.tin||!s.dout||!s.tout) return null;
+  const start=new Date(`${s.din}T${s.tin}`);
+  const end=new Date(`${s.dout}T${s.tout}`);
+  const h=(end-start)/3600000;
+  return (isNaN(h)||h<0)?null:h;
+}
+function rowSalary(s,emp){ const h=calcHours(s); if(h===null) return null; let r=state.rates[emp]*(s.double?2:1); return h*r; }
+
+// ---------- ENTRY ----------
+function renderEntry(){
+  const emp=state.emp, t=$("entryTable");
+  let html=`<thead><tr>
+    <th>Day</th><th>Date in</th><th>Time in</th><th>Date out</th><th>Time out</th>
+    <th>2×</th><th>Total hours</th><th>Rate</th><th>Salary</th><th>Annotation</th><th></th></tr></thead><tbody>`;
+  state.shifts[emp].forEach(s=>{
+    const h=calcHours(s), sal=rowSalary(s,emp), rate=state.rates[emp]*(s.double?2:1);
+    html+=`<tr data-id="${s.id}" class="${s.double?'dbl':''}">
+      <td class="calc">${dayName(s.din)}</td>
+      <td class="editable"><input class="inline-input" type="date" data-f="din" value="${s.din||''}"></td>
+      <td class="editable"><input class="inline-input" type="time" data-f="tin" value="${s.tin||''}"></td>
+      <td class="editable"><input class="inline-input" type="date" data-f="dout" value="${s.dout||''}"></td>
+      <td class="editable"><input class="inline-input" type="time" data-f="tout" value="${s.tout||''}"></td>
+      <td style="text-align:center" class="editable"><input type="checkbox" data-f="double" ${s.double?'checked':''}></td>
+      <td class="calc">${h===null?'n/a':fmtHM(h)}</td>
+      <td class="calc">${rate}</td>
+      <td class="calc">${sal===null?'n/a':sal.toFixed(2)}</td>
+      <td class="note-cell editable"><input class="note-input" type="text" data-f="note" value="${(s.note||'').replace(/"/g,'&quot;')}" placeholder="optional"></td>
+      <td><button class="tiny danger" data-del="${s.id}">✕</button></td></tr>`;
+  });
+  t.innerHTML=html+`</tbody>`;
+  t.querySelectorAll("input").forEach(inp=>inp.addEventListener("change",e=>{
+    const id=e.target.closest("tr").dataset.id, f=e.target.dataset.f;
+    const s=state.shifts[emp].find(x=>x.id===id);
+    s[f]= f==="double"? e.target.checked : e.target.value;
+    renderEntry(); renderOutput(); runCheck();
+  }));
+  t.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",e=>{
+    state.shifts[emp]=state.shifts[emp].filter(x=>x.id!==e.target.dataset.del);
+    renderEntry(); renderOutput(); runCheck();
+  }));
+}
+
+// ---------- OUTPUT ----------
+function renderOutput(){
+  const emp=state.emp, shifts=state.shifts[emp];
+  $("outName").textContent="— "+state.names[emp];
+  let tH=0,tS=0,rows="";
+  // does any shift carry an annotation? if so, show the column
+  const anyNote = shifts.some(s=>s.note&&s.note.trim());
+  shifts.forEach(s=>{
+    const h=calcHours(s), sal=rowSalary(s,emp), rate=state.rates[emp]*(s.double?2:1);
+    if(h!==null){tH+=h;tS+=sal;}
+    const noteCell = anyNote ? `<td>${(s.note||'').replace(/</g,'&lt;')}</td>` : '';
+    rows+=`<tr class="${s.double?'dbl':''}">
+      <td>${dayName(s.din)}</td><td class="col-in">${fmtDMY(s.din)}</td><td class="col-in">${s.tin||'-'}</td>
+      <td class="col-out">${fmtDMY(s.dout)}</td><td class="col-out">${s.tout||'-'}</td>
+      <td>${h===null?'n/a':fmtHM(h)}</td><td>${rate}${s.double?'<span class="dbl-tag">2×</span>':''}</td>
+      <td>${sal===null?'n/a':sal.toFixed(2)}</td>${noteCell}</tr>`;
+  });
+  const label=$("periodLabel").value||"";
+  const ncols = anyNote?9:8;
+  const headNote = anyNote?'<th>Annotation</th>':'';
+  // "Total hours till <end of period>" label
+  const pe=$("periodEnd").value;
+  let tillTxt="Total hours";
+  if(pe){ const d=new Date(pe); tillTxt=`Total hours to ${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+  const paid = $("paidToggle") && $("paidToggle").checked;
+  // Main table (no totals row — totals live in a separate side table so column widths aren't skewed)
+  const mainTable=`
+    <table class="sheet" style="width:auto;min-width:760px;">
+      <thead>
+        <tr><td colspan="${ncols}" class="title-cell">${state.names[emp]}${label?' &nbsp;·&nbsp; '+label:''}</td></tr>
+        <tr><th>Day</th><th class="col-in">Date in</th><th class="col-in">Time in</th><th class="col-out">Date out</th><th class="col-out">Time out</th>
+        <th>Total hours</th><th>Hourly rate (RM)</th><th>Salary (RM)</th>${headNote}</tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  const totalsTable=`
+    <table class="sheet totals-side">
+      <tr><td class="label">${tillTxt}</td><td class="val">${fmtHM(tH)}</td></tr>
+      <tr><td class="label">Total salary</td><td class="val">RM ${tS.toFixed(2)}</td></tr>
+      ${paid?`<tr><td class="paid-cell" colspan="2">PAID</td></tr>`:''}
+    </table>`;
+  $("outputCard").innerHTML=`<div class="out-layout">${mainTable}<div class="totals-wrap">${totalsTable}</div></div>`;
+}
+
+// ---------- SUM CHECK (both carers vs period length) ----------
+function totalHours(emp){ return state.shifts[emp].reduce((a,s)=>{const h=calcHours(s);return a+(h||0);},0); }
+function runCheck(){
+  const b=$("checkBanner");
+  const ps=$("periodStart").value, pe=$("periodEnd").value;
+  const combined=totalHours("Da")+totalHours("Nun");
+  if(!ps||!pe){ b.className=""; b.textContent=""; b.innerHTML=`<div class="warn" style="border-radius:6px;padding:10px 12px;">Combined hours so far: <b>${fmtHM(combined)}</b>. Set period start & end above to validate against full coverage.</div>`; return; }
+  const expected=(new Date(pe)-new Date(ps))/3600000;
+  const ok=Math.abs(combined-expected)<0.001;
+  b.innerHTML=`<div class="${ok?'ok':'warn'}">Combined paid hours (Da + Nun) = <b>${fmtHM(combined)}</b> vs full period <b>${fmtHM(expected)}</b>. ${ok?'✓ Matches — period fully covered.':'⚠ Does NOT match — off by '+fmtHM(Math.abs(combined-expected))+'. Check for a missing shift or wrong time.'}</div>`;
+}
+
+// ---------- ADD / TABS / LOAD ----------
+$("addBtn").addEventListener("click",()=>{
+  if(!$("addDin").value){alert("Pick a Date in.");return;}
+  state.shifts[state.emp].push({id:uid(),din:$("addDin").value,tin:$("addTin").value,dout:$("addDout").value||$("addDin").value,tout:$("addTout").value,double:false});
+  renderEntry();renderOutput();runCheck();
+});
+$("empTabs").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
+  $("empTabs").querySelectorAll("button").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active"); state.emp=b.dataset.emp; renderEntry();renderOutput();
+}));
+["rateDa","rateNun"].forEach(id=>$(id).addEventListener("change",e=>{state.rates[id==="rateDa"?"Da":"Nun"]=parseFloat(e.target.value)||0;renderEntry();renderOutput();runCheck();}));
+$("periodLabel").addEventListener("input",renderOutput);
+$("paidToggle").addEventListener("change",renderOutput);
+["periodStart","periodEnd"].forEach(id=>$(id).addEventListener("change",()=>{runCheck();renderOutput();}));
+
+$("loadOcr").addEventListener("click",()=>{
+  const lines=$("ocrBox").value.split("\n").map(l=>l.trim()).filter(Boolean);
+  let added=0;
+  lines.forEach(l=>{
+    const p=l.split(",").map(x=>x.trim());
+    if(p.length<5) return;
+    let [carer,din,tin,dout,tout,note]=p;
+    const emp = /^da/i.test(carer)?"Da": /^(nun|anun)/i.test(carer)?"Nun":null;
+    if(!emp) return;
+    state.shifts[emp].push({id:uid(),din,tin,dout,tout,double:false,note:note||""});
+    added++;
+  });
+  renderEntry();renderOutput();runCheck();
+  alert(added+" shift(s) loaded.");
+});
+$("clearAll").addEventListener("click",()=>{ if(confirm("Clear all shifts?")){state.shifts={Da:[],Nun:[]};renderEntry();renderOutput();runCheck();} });
+$("copyPrompt").addEventListener("click",()=>{
+  navigator.clipboard.writeText($("coworkPrompt").textContent).then(()=>{
+    const b=$("copyPrompt"),o=b.textContent; b.textContent="Copied ✓"; setTimeout(()=>b.textContent=o,1500);
+  });
+});
+
+// ---------- EXPORT ----------
+$("pngBtn").addEventListener("click",()=>{
+  html2canvas($("outputCard"),{scale:2,backgroundColor:"#fff"}).then(c=>{
+    const a=document.createElement("a");
+    const label=($("periodLabel").value||"timesheet").replace(/[^a-z0-9]+/gi,"-");
+    a.download=`${state.names[state.emp].replace(/[^a-z0-9]+/gi,"-")}-${label}.png`;
+    a.href=c.toDataURL("image/png"); a.click();
+  });
+});
+$("copyBtn").addEventListener("click",()=>{
+  const emp=state.emp; let txt="Day\tDate in\tTime in\tDate out\tTime out\tTotal hours\tHourly rate\tSalary\n",tH=0,tS=0;
+  state.shifts[emp].forEach(s=>{const h=calcHours(s),sal=rowSalary(s,emp),rate=state.rates[emp]*(s.double?2:1);if(h!==null){tH+=h;tS+=sal;}
+    txt+=`${dayName(s.din)}\t${fmtDMY(s.din)}\t${s.tin||'-'}\t${fmtDMY(s.dout)}\t${s.tout||'-'}\t${h===null?'n/a':fmtHM(h)}\t${rate}\t${sal===null?'':sal.toFixed(2)}\n`;});
+  txt+=`\t\t\t\t\tTotal\t${fmtHM(tH)}\tRM ${tS.toFixed(2)}`;
+  navigator.clipboard.writeText(txt).then(()=>{const b=$("copyBtn"),o=b.textContent;b.textContent="Copied ✓";setTimeout(()=>b.textContent=o,1500);});
+});
+
+// ---------- GOOGLE SHEET ----------
+// raw parse line for one shift, re-loadable by the tool's box
+function rawLine(emp,s){
+  const carer = emp==="Da" ? "Da" : "Nun";
+  let l=`${carer}, ${s.din}, ${s.tin}, ${s.dout}, ${s.tout}`;
+  if(s.note&&s.note.trim()) l+=`, ${s.note.trim()}`;
+  return l;
+}
+function buildPayload(){
+  const label=$("periodLabel").value||"(period)";
+  const payload={period:label, rows:[]};
+  ["Da","Nun"].forEach(emp=>{
+    // per-carer-per-period totals, repeated on every row for that carer
+    let cH=0,cS=0;
+    state.shifts[emp].forEach(s=>{const h=calcHours(s),sal=rowSalary(s,emp);if(h!==null){cH+=h;cS+=sal;}});
+    const carerTotalHours=fmtHM(cH), carerTotalSalary=cS.toFixed(2);
+    state.shifts[emp].forEach(s=>{
+      const h=calcHours(s), sal=rowSalary(s,emp), rate=state.rates[emp]*(s.double?2:1);
+      payload.rows.push({
+        period:label, carer:state.names[emp], day:dayName(s.din),
+        dateIn:fmtDMY(s.din), timeIn:s.tin, dateOut:fmtDMY(s.dout), timeOut:s.tout,
+        totalHours:fmtHM(h), hourlyRate:rate, doubleRate:s.double?"YES":"",
+        salary:sal===null?'':sal.toFixed(2), note:s.note||"",
+        rawRow:rawLine(emp,s),
+        periodTotalHours:carerTotalHours, periodTotalSalary:carerTotalSalary
+      });
+    });
+  });
+  return payload;
+}
+function postToSheet(url, payload, statusEl){
+  statusEl.textContent="Saving…";
+  // Real CORS request so we can READ the response and confirm. The Apps Script
+  // returns JSON with CORS allowed. If it fails, we fall back and tell the user.
+  return fetch(url,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)})
+    .then(r=>r.json())
+    .then(j=>{
+      if(j&&j.ok){ statusEl.innerHTML=`<span style="color:#1e7e34;font-weight:bold;">✓ Saved ${j.added} rows to the “${j.sheet||'History'}” tab. Open the sheet to confirm.</span>`; }
+      else { statusEl.innerHTML=`<span style="color:#a40000;font-weight:bold;">Script ran but reported a problem: ${j&&j.error?j.error:'unknown'}.</span>`; }
+    })
+    .catch(e=>{
+      statusEl.innerHTML=`<span style="color:#a40000;font-weight:bold;">Could not confirm the save (${e.message}).</span> This usually means the Web App isn't deployed with access “Anyone”, or the URL isn't the <b>/exec</b> URL. Use “Test connection” to diagnose.`;
+    });
+}
+$("sheetBtn").addEventListener("click",()=>{
+  const url=$("scriptUrl").value.trim();
+  if(!url){alert("Paste your Apps Script Web App URL in the setup box first.");return;}
+  if(!buildPayload().rows.length){alert("No shifts to save yet.");return;}
+  postToSheet(url, buildPayload(), $("sheetStatus"));
+});
+$("testBtn").addEventListener("click",()=>{
+  const url=$("scriptUrl").value.trim();
+  if(!url){alert("Paste the URL first.");return;}
+  const st=$("sheetStatus"); st.textContent="Testing…";
+  fetch(url,{method:"GET"}).then(r=>r.text()).then(t=>{
+    if(/receiver is live/i.test(t)){ st.innerHTML=`<span style="color:#1e7e34;font-weight:bold;">✓ Connection works — the script is live and reachable.</span>`; }
+    else { st.innerHTML=`<span style="color:#a40000;font-weight:bold;">Reached a URL but it didn't look like the timesheet script. Check you copied the right /exec URL.</span>`; }
+  }).catch(e=>{
+    st.innerHTML=`<span style="color:#a40000;font-weight:bold;">Can't reach the URL (${e.message}).</span> Re-deploy the Apps Script as a Web App with “Who has access: Anyone”, then copy the <b>/exec</b> URL again.`;
+  });
+});
+
+renderEntry();renderOutput();runCheck();
+</script>
+</body>
+</html>
