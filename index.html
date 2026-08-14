@@ -150,6 +150,7 @@ Nun, 2026-06-02, 07:00, 2026-06-02, 20:00"></textarea>
           <input type="checkbox" id="paidToggle"> Mark PAID
         </label>
         <button id="pngBtn">Download as image (PNG)</button>
+        <button id="shareBtn" class="secondary">Share image</button>
         <button id="copyBtn" class="secondary">Copy table</button>
         <button id="sheetBtn" class="secondary">Save period to Google Sheet</button>
       </div>
@@ -330,15 +331,108 @@ $("copyPrompt").addEventListener("click",()=>{
 
 // ---------- EXPORT ----------
 const fileNames = { Da: "Anida", Nun: "Anun" };
-$("pngBtn").addEventListener("click",()=>{
-  html2canvas($("outputCard"),{scale:2,backgroundColor:"#fff"}).then(c=>{
-    const a=document.createElement("a");
-    const carer=(fileNames[state.emp]||state.emp).toLowerCase();
-    const period=($("periodLabel").value||"period").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase();
-    const paid = $("paidToggle") && $("paidToggle").checked ? "-paid" : "";
-    a.download=`${carer}-${period}${paid}.png`;
-    a.href=c.toDataURL("image/png"); a.click();
+
+function exportFileName(){
+  const carer=(fileNames[state.emp]||state.emp).toLowerCase();
+  const period=($("periodLabel").value||"period").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase();
+  const paid = $("paidToggle") && $("paidToggle").checked ? "-paid" : "";
+  return `${carer}-${period}${paid}.png`;
+}
+
+/* Render the timesheet to a PNG blob.
+   The visible card sits inside an overflow-x:auto box, and html2canvas defaults to
+   the viewport, so on a phone it captured only the scrolled-into-view slice.
+   Fix: clone the card into an off-screen, unclipped, shrink-to-fit holder and
+   capture that at its own natural size, with windowWidth forced wide enough that
+   the cloned document doesn't reflow the table narrower. */
+function renderPngBlob(){
+  return new Promise((resolve,reject)=>{
+    const holder=document.createElement("div");
+    holder.style.cssText="position:absolute;left:-100000px;top:0;background:#fff;"+
+      "padding:16px;width:max-content;max-width:none;overflow:visible;";
+    holder.appendChild($("outputCard").cloneNode(true));
+    // stop the flex row from wrapping mid-capture
+    const lay=holder.querySelector(".out-layout");
+    if(lay) lay.style.flexWrap="nowrap";
+    document.body.appendChild(holder);
+
+    const r=holder.getBoundingClientRect();   // includes padding, unlike scrollWidth quirks
+    const w=Math.ceil(Math.max(r.width, holder.scrollWidth));
+    const h=Math.ceil(Math.max(r.height, holder.scrollHeight));
+    // keep the canvas under mobile memory limits (~16.7M px on iOS Safari)
+    const scale=Math.min(2, Math.sqrt(12000000/Math.max(1,w*h)));
+
+    html2canvas(holder,{
+      scale, backgroundColor:"#fff",
+      width:w, height:h,
+      windowWidth:w+200, windowHeight:h+200,
+      scrollX:0, scrollY:0, useCORS:true
+    }).then(c=>{
+      holder.remove();
+      c.toBlob(b=> b?resolve(b):reject(new Error("toBlob failed")), "image/png");
+    }).catch(e=>{ holder.remove(); reject(e); });
   });
+}
+
+function downloadBlob(blob,name){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.download=name; a.href=url; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),4000);
+}
+
+$("pngBtn").addEventListener("click",()=>{
+  const btn=$("pngBtn"), old=btn.textContent; btn.textContent="Rendering…"; btn.disabled=true;
+  renderPngBlob()
+    .then(b=>downloadBlob(b,exportFileName()))
+    .catch(e=>alert("Could not build the image: "+e.message))
+    .finally(()=>{ btn.textContent=old; btn.disabled=false; });
+});
+
+/* Share: hands the PNG straight to the OS share sheet (WhatsApp, Mail, Photos…)
+   instead of dropping it in Downloads. iOS Safari revokes user activation across
+   an await, so we pre-render on pointerdown and share the cached blob on click. */
+let sharePrewarm=null, sharePrewarmKey=null;
+function prewarmKey(){ return exportFileName()+"|"+$("outputCard").innerHTML.length; }
+
+$("shareBtn").addEventListener("pointerdown",()=>{
+  const key=prewarmKey();
+  if(sharePrewarmKey===key && sharePrewarm) return;
+  sharePrewarmKey=key;
+  sharePrewarm=renderPngBlob().catch(()=>null);
+});
+
+$("shareBtn").addEventListener("click",async()=>{
+  const btn=$("shareBtn"), old=btn.textContent;
+  const name=exportFileName();
+  const finish=()=>{ btn.textContent=old; btn.disabled=false; };
+  btn.disabled=true;
+
+  let blob=null;
+  if(sharePrewarm && sharePrewarmKey===prewarmKey()){
+    blob=await sharePrewarm;   // usually already resolved — activation survives
+  }
+  if(!blob){
+    btn.textContent="Rendering…";
+    try{ blob=await renderPngBlob(); }
+    catch(e){ finish(); alert("Could not build the image: "+e.message); return; }
+  }
+  sharePrewarm=null; sharePrewarmKey=null;
+
+  const file=new File([blob],name,{type:"image/png"});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{
+      await navigator.share({files:[file], title:name});
+      finish(); return;
+    }catch(err){
+      finish();
+      if(err && err.name==="AbortError") return;   // user cancelled
+      downloadBlob(blob,name);                     // NotAllowedError etc.
+      return;
+    }
+  }
+  finish();
+  downloadBlob(blob,name);   // desktop / unsupported browser
 });
 $("copyBtn").addEventListener("click",()=>{
   const emp=state.emp; let txt="Day\tDate in\tTime in\tDate out\tTime out\tTotal hours\tHourly rate\tSalary\n",tH=0,tS=0;
