@@ -193,10 +193,12 @@ function fmtDMY(d){ if(!d) return ""; const dt=parseYMD(d); return String(dt.get
 function dayName(d){ if(!d) return ""; return ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][parseYMD(d).getDay()]; }
 function fmtHM(h){ if(h===null) return "n/a"; const hh=Math.floor(h), mm=Math.round((h-hh)*60); return hh+":"+String(mm).padStart(2,'0'); }
 
+// All times are Malaysian time (MYT, fixed UTC+8, no daylight saving) regardless of the browser's timezone.
+function myt(dateTime){ return new Date(dateTime.slice(0,16)+":00+08:00"); }
 function calcHours(s){
   if(!s.din||!s.tin||!s.dout||!s.tout) return null;
-  const start=new Date(`${s.din}T${s.tin}`);
-  const end=new Date(`${s.dout}T${s.tout}`);
+  const start=myt(`${s.din}T${s.tin}`);
+  const end=myt(`${s.dout}T${s.tout}`);
   const h=(end-start)/3600000;
   return (isNaN(h)||h<0)?null:h;
 }
@@ -259,7 +261,7 @@ function renderOutput(){
   // "Total hours till <end of period>" label
   const pe=$("periodEnd").value;
   let tillTxt="Total hours";
-  if(pe){ const d=new Date(pe); tillTxt=`Total hours to ${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+  if(pe){ const [dp,tp]=pe.split("T"); const [y,m,d]=dp.split("-"); tillTxt=`Total hours to ${d}/${m}/${y} ${(tp||"").slice(0,5)}`; }
   const paid = $("paidToggle") && $("paidToggle").checked;
   // Main table (no totals row — totals live in a separate side table so column widths aren't skewed)
   const mainTable=`
@@ -287,7 +289,7 @@ function runCheck(){
   const ps=$("periodStart").value, pe=$("periodEnd").value;
   const combined=totalHours("Da")+totalHours("Nun");
   if(!ps||!pe){ b.className=""; b.textContent=""; b.innerHTML=`<div class="warn" style="border-radius:6px;padding:10px 12px;">Combined hours so far: <b>${fmtHM(combined)}</b>. Set period start & end above to validate against full coverage.</div>`; return; }
-  const expected=(new Date(pe)-new Date(ps))/3600000;
+  const expected=(myt(pe)-myt(ps))/3600000;
   const ok=Math.abs(combined-expected)<0.001;
   b.innerHTML=`<div class="${ok?'ok':'warn'}">Combined paid hours (Da + Nun) = <b>${fmtHM(combined)}</b> vs full period <b>${fmtHM(expected)}</b>. ${ok?'✓ Matches — period fully covered.':'⚠ Does NOT match — off by '+fmtHM(Math.abs(combined-expected))+'. Check for a missing shift or wrong time.'}</div>`;
 }
